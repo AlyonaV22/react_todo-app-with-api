@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserWarning } from './UserWarning';
 import {
   addTodo,
@@ -16,13 +16,15 @@ import { TodoCard } from './commponents/TodoCard';
 import { Todo } from './types/Todo';
 import { Status } from './types/Status';
 import { ErrorType } from './types/Errors';
+import { LoadingTodo } from './types/LoadingTodo';
+import { loadingTodo } from './utils/loadingTodo';
 
 export const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filterType, setFilterType] = useState<Status>(Status.All);
   const [errorType, setErrorType] = useState<ErrorType>(ErrorType.EmptyTitle);
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
-  const [todoLoading, setTodoLoading] = useState<Loading>({});
+  const [todoLoading, setTodoLoading] = useState<LoadingTodo>({});
 
   useEffect(() => {
     const timeoutId = setTimeout(
@@ -32,6 +34,7 @@ export const App: React.FC = () => {
 
     getTodos()
       .then(setTodos)
+
       .catch(() => {
         setErrorType(ErrorType.UnableToLoad);
         clearTimeout(timeoutId);
@@ -39,19 +42,6 @@ export const App: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, []);
-
-  interface Loading {
-    [key: number]: number;
-  }
-
-  const loadingTodo = (todoList: Todo[]): Loading => {
-    return todoList.reduce((acc: Loading, todo: Todo): Loading => {
-      return {
-        ...acc,
-        [todo.id]: todo.id,
-      };
-    }, {} as Loading);
-  };
 
   const todoFilter = todos.filter(todo => {
     switch (filterType) {
@@ -64,43 +54,51 @@ export const App: React.FC = () => {
     }
   });
 
-  const addNewTodo = (todoToAdd: Todo): void => {
-    setTempTodo(todoToAdd);
+  const handleAddNewTodo = useCallback(
+    async (todoToAdd: Todo): Promise<void> => {
+      setTempTodo(todoToAdd);
 
-    addTodo(todoToAdd)
-      .then(todoNew => {
+      try {
+        const todoNew = await addTodo(todoToAdd);
+
         setTodos(currentTodos => [...currentTodos, todoNew]);
-      })
-      .catch(() => {
+      } catch {
         setErrorType(ErrorType.UnableToAdd);
-      })
-      .finally(() => {
+      } finally {
         setTempTodo(null);
-      });
-  };
+      }
+    },
+    [setTodos, setTempTodo, setErrorType],
+  );
 
-  const deleteTodoItem = (todoId: number): void => {
-    deleteTodo(todoId)
-      .then(() => {
+  const handleDeleteTodo = useCallback(
+    async (todoId: number): Promise<void> => {
+      try {
+        await deleteTodo(todoId);
         setTodos(currentTodos =>
           currentTodos.filter(todo => todo.id !== todoId),
         );
-      })
-      .catch(() => {
+      } catch {
         setErrorType(ErrorType.UnableToDelete);
-      })
-      .finally(() => {
+      } finally {
         setTempTodo(null);
-      });
-  };
+      }
+    },
+    [setTodos, setErrorType, setTempTodo],
+  );
 
-  const updateTodoItems = (
-    updateTodoItem: Todo,
-    key: keyof Todo,
-    value: boolean | string,
-  ): Promise<boolean> => {
-    return updateTodo({ ...updateTodoItem, [key]: value })
-      .then(todoUpdated => {
+  const handleUpdateTodo = useCallback(
+    async (
+      updateTodoItem: Todo,
+      key: keyof Todo,
+      value: boolean | string,
+    ): Promise<boolean> => {
+      try {
+        const todoUpdated = await updateTodo({
+          ...updateTodoItem,
+          [key]: value,
+        });
+
         setTodos(currentTodos =>
           currentTodos.map(todo =>
             todo.id === updateTodoItem.id ? todoUpdated : todo,
@@ -108,15 +106,16 @@ export const App: React.FC = () => {
         );
 
         return false;
-      })
-      .catch(() => {
+      } catch {
         setErrorType(ErrorType.UnableToUpdate);
 
         return true;
-      });
-  };
+      }
+    },
+    [setTodos, setErrorType],
+  );
 
-  const loadedDeleteTodo = (): void => {
+  const removeCompletedTodos = useCallback(() => {
     const completedTodos = todos.filter(todo => todo.completed);
 
     setTodoLoading(loadingTodo(completedTodos));
@@ -138,43 +137,42 @@ export const App: React.FC = () => {
         });
       })
       .finally(() => setTodoLoading({}));
-  };
+  }, [todos, setTodoLoading, setTodos, setErrorType]);
 
-  const handleAllCompleted = (): void => {
-    const completedAllTodos = (
+  const manageCompletedTodos = useCallback(async () => {
+    const completedAllTodos = async (
       targetTodos: Todo[],
       completed: boolean,
-    ): Promise<void> => {
-      return Promise.all(
-        targetTodos.map(todo => updateTodo({ ...todo, completed })),
-      )
-        .then(() => {
-          setTodos(currentTodos =>
-            currentTodos.map(todo =>
-              targetTodos.some(t => t.id === todo.id)
-                ? { ...todo, completed }
-                : todo,
-            ),
-          );
-        })
-        .catch(() => {
-          setErrorType(ErrorType.UnableToUpdate);
-        })
-        .finally(() => {
-          setTodoLoading({});
-        });
+    ) => {
+      try {
+        await Promise.all(
+          targetTodos.map(todo => updateTodo({ ...todo, completed })),
+        );
+
+        setTodos(currentTodos =>
+          currentTodos.map(todo =>
+            targetTodos.some(t => t.id === todo.id)
+              ? { ...todo, completed }
+              : todo,
+          ),
+        );
+      } catch {
+        setErrorType(ErrorType.UnableToUpdate);
+      } finally {
+        setTodoLoading({});
+      }
     };
 
     const activeTodos = todos.filter(todo => !todo.completed);
 
     if (activeTodos.length) {
       setTodoLoading(loadingTodo(activeTodos));
-      completedAllTodos(activeTodos, true);
+      await completedAllTodos(activeTodos, true);
     } else {
       setTodoLoading(loadingTodo(todos));
-      completedAllTodos(todos, false);
+      await completedAllTodos(todos, false);
     }
-  };
+  }, [todos, setTodos, setErrorType, setTodoLoading]);
 
   const lengthOfTodo = todos.length;
 
@@ -192,8 +190,8 @@ export const App: React.FC = () => {
           setErrorType={setErrorType}
           onChangeTodoTask={setTempTodo}
           tempTodo={tempTodo}
-          addNewTodo={addNewTodo}
-          handleAllCompleted={handleAllCompleted}
+          onAddNewTodo={handleAddNewTodo}
+          manageCompletedTodos={manageCompletedTodos}
           lengthOfTodo={lengthOfTodo}
         />
 
@@ -202,8 +200,8 @@ export const App: React.FC = () => {
             <TodoCard
               key={todo.id}
               todo={todo}
-              deleteTodoItem={deleteTodoItem}
-              updateTodoItems={updateTodoItems}
+              handleDeleteTodo={handleDeleteTodo}
+              handleUpdateTodo={handleUpdateTodo}
               todoLoading={todoLoading}
             />
           ))}
@@ -211,8 +209,8 @@ export const App: React.FC = () => {
           {tempTodo && (
             <TodoCard
               todo={tempTodo}
-              updateTodoItems={updateTodoItems}
-              deleteTodoItem={deleteTodoItem}
+              handleUpdateTodo={handleUpdateTodo}
+              handleDeleteTodo={handleDeleteTodo}
               todoLoading={todoLoading}
             />
           )}
@@ -223,7 +221,7 @@ export const App: React.FC = () => {
             filterType={filterType}
             onFiltered={setFilterType}
             todos={todos}
-            loadedDeleteTodo={loadedDeleteTodo}
+            removeCompletedTodos={removeCompletedTodos}
             setTodoLoading={setTodoLoading}
           />
         )}

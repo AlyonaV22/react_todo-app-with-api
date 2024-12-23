@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Todo } from '../types/Todo';
 import { USER_ID } from '../api/todos';
 import cn from 'classnames';
@@ -9,8 +9,8 @@ interface Props {
   setErrorType: (errorType: ErrorType) => void;
   onChangeTodoTask: (todoTask: Todo | null) => void;
   tempTodo: Todo | null;
-  addNewTodo: (todo: Todo) => Promise<Todo | void>;
-  handleAllCompleted: () => void;
+  onAddNewTodo: (todo: Todo) => Promise<Todo | void>;
+  manageCompletedTodos: () => void;
   lengthOfTodo: number;
 }
 
@@ -20,8 +20,8 @@ export const Header: React.FC<Props> = props => {
     setErrorType,
     onChangeTodoTask,
     tempTodo,
-    addNewTodo,
-    handleAllCompleted,
+    onAddNewTodo,
+    manageCompletedTodos,
     lengthOfTodo,
   } = props;
 
@@ -29,7 +29,10 @@ export const Header: React.FC<Props> = props => {
 
   const todoUseRef = useRef<HTMLInputElement>(null);
 
-  const completedTodos = todos.every(todo => todo.completed);
+  const completedTodos = useMemo(
+    () => todos.every(todo => todo.completed),
+    [todos],
+  );
 
   useEffect(() => {
     if (todoUseRef.current && tempTodo === null) {
@@ -55,7 +58,7 @@ export const Header: React.FC<Props> = props => {
 
     let hasNewTodo = true;
 
-    addNewTodo(itemTodo)
+    onAddNewTodo(itemTodo)
       .catch(() => {
         setErrorType(ErrorType.UnableToAdd);
         hasNewTodo = false;
@@ -77,7 +80,7 @@ export const Header: React.FC<Props> = props => {
             type="button"
             className={cn('todoapp__toggle-all', { active: completedTodos })}
             data-cy="ToggleAllButton"
-            onClick={handleAllCompleted}
+            onClick={manageCompletedTodos}
           />
         )}
 

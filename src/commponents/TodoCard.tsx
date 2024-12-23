@@ -3,15 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Todo } from '../types/Todo';
 import cn from 'classnames';
-
-interface LoadingTodo {
-  [key: number]: number;
-}
+import { LoadingTodo } from '../types/LoadingTodo';
 
 interface Props {
   todo: Todo;
-  deleteTodoItem: (todoId: number) => Promise<void>;
-  updateTodoItems: (
+  handleDeleteTodo: (todoId: number) => Promise<void>;
+  handleUpdateTodo: (
     updateTodoItem: Todo,
     key: keyof Todo,
     value: boolean | string,
@@ -20,7 +17,7 @@ interface Props {
 }
 
 export const TodoCard: React.FC<Props> = props => {
-  const { todo, deleteTodoItem, updateTodoItems, todoLoading } = props;
+  const { todo, handleDeleteTodo, handleUpdateTodo, todoLoading } = props;
 
   const [hasLoading, setHasLoading] = useState(false);
   const [todoNewTitle, setTodoNewTitle] = useState(todo.title);
@@ -38,12 +35,12 @@ export const TodoCard: React.FC<Props> = props => {
 
   const onDelete = () => {
     setHasLoading(true);
-    deleteTodoItem(todo.id).finally(() => setHasLoading(false));
+    handleDeleteTodo(todo.id).finally(() => setHasLoading(false));
   };
 
   const onUpdateTodo = () => {
     setHasLoading(true);
-    updateTodoItems(todo, 'completed', !todo.completed).finally(() =>
+    handleUpdateTodo(todo, 'completed', !todo.completed).finally(() =>
       setHasLoading(false),
     );
   };
@@ -62,7 +59,7 @@ export const TodoCard: React.FC<Props> = props => {
     }
 
     setHasLoading(true);
-    updateTodoItems(todo, 'title', todoNewTitle.trim())
+    handleUpdateTodo(todo, 'title', todoNewTitle.trim())
       .then(char => sethasEditing(char))
       .finally(() => setHasLoading(false));
   };
